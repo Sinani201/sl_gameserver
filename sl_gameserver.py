@@ -158,7 +158,7 @@ if __name__ == "__main__":
     factory.protocol = SLServerProtocol
 
     loop = asyncio.get_event_loop()
-    coro = loop.create_server(factory, "0.0.0.0", 80)
+    coro = loop.create_server(factory, "127.0.0.1", 80)
     server = loop.run_until_complete(coro)
 
     try:
