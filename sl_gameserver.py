@@ -167,11 +167,11 @@ class SLServerProtocol(WebSocketServerProtocol):
 if __name__ == "__main__":
     import asyncio
 
-    factory = WebSocketServerFactory("ws://localhost:80", debug=False)
+    factory = WebSocketServerFactory()
     factory.protocol = SLServerProtocol
 
     loop = asyncio.get_event_loop()
-    coro = loop.create_server(factory, "127.0.0.1", 80)
+    coro = loop.create_server(factory, "127.0.0.1", 443)
     server = loop.run_until_complete(coro)
 
     try:
