@@ -40,6 +40,26 @@ class SLServerProtocol(WebSocketServerProtocol):
         self.clientState = ClientState.justConnected
         self.lobby = None
 
+    def announceMsg(self, msg, sendToSelf=True):
+        for p, s in self.lobby.players.items():
+            if s and (p != self.name or sendToSelf):
+                s.sendMessage(msg.encode("utf8"))
+
+    def check_giveup(self):
+        """ Checks if this game has been given up, and sends the :allgiveup
+            message if it has.  Also returns true if the game has been given
+            up.
+        """
+        lenplayers = len([p for p in
+                          self.lobby.players.values() if p])
+        print(lenplayers)
+        print(len(self.lobby.giveups))
+        if len(self.lobby.giveups) >= lenplayers:
+            self.announceMsg(":allgiveup")
+            return True
+        return False
+
+
     def onMessage(self, payload, isBinary):
         if not isBinary:
             msg = payload.decode("utf8")
@@ -61,8 +81,8 @@ class SLServerProtocol(WebSocketServerProtocol):
 
                                 if self.lobbyname not in lobbies:
                                     break
-                            Lobby = namedtuple("Lobby", ["players", "words", "lock"])
-                            self.lobby = Lobby(OrderedDict(), {}, Lock())
+                            Lobby = namedtuple("Lobby", ["players", "words", "giveups", "lock"])
+                            self.lobby = Lobby(OrderedDict(), {}, set(), Lock())
                             lobbies[self.lobbyname] = self.lobby
                         self.clientState = ClientState.receivingWords
 
@@ -113,6 +133,7 @@ class SLServerProtocol(WebSocketServerProtocol):
                         self.sendMessage(":badname".encode("utf8"), isBinary=False)
                     else:
                         correct_words = []
+                        # send a list of all of the words in this game
                         for word, answerer in self.lobby.words.items():
                             self.sendMessage(word.encode("utf8"))
                             if answerer:
@@ -122,11 +143,16 @@ class SLServerProtocol(WebSocketServerProtocol):
                             self.sendMessage(":attempt {0} {1}".format(
                                 word, answerer).encode("utf8"))
 
+                        # also show who has voted to give up
+                        for giveupper in self.lobby.giveups:
+                            self.sendMessage((":giveup "+giveupper).encode("utf8"))
+
+                        if (self.check_giveup()):
+                            self.lobby.giveups.add(self.name)
+
                         # inform everyone else that this player has joined
                         # the game
-                        for p, s in self.lobby.players.items():
-                            if s:
-                                s.sendMessage(":join {}".format(self.name).encode("utf8"))
+                        self.announceMsg(":join {}".format(self.name))
                         self.lobby.players[self.name] = self
                         self.clientState = ClientState.playing
 
@@ -141,10 +167,18 @@ class SLServerProtocol(WebSocketServerProtocol):
                                     self.lobby.words[word] = self.name
                             except KeyError:
                                 pass
-                            for p, s in self.lobby.players.items():
-                                if p != self.name and s:
-                                    s.sendMessage(":attempt {0} {1}".format(
-                                        word, self.name).encode("utf8"))
+                            self.announceMsg(":attempt {0} {1}".format(
+                                word, self.name), sendToSelf=False)
+                    elif smsg[0] == ":giveup":
+                        with (yield from self.lobby.lock):
+                            self.lobby.giveups.add(self.name)
+                            # send the give up message to everyone in the game
+                            self.announceMsg(":giveup "+self.name, sendToSelf=False)
+                            self.check_giveup()
+                    elif smsg[0] == ":ungiveup":
+                        with (yield from self.lobby.lock):
+                            self.lobby.giveups.discard(self.name)
+                            self.announceMsg(":ungiveup "+self.name, sendToSelf=False)
                 except (ValueError, AttributeError):
                     pass
 
@@ -153,10 +187,11 @@ class SLServerProtocol(WebSocketServerProtocol):
         if self.clientState == ClientState.playing:
             with (yield from self.lobby.lock):
                 self.lobby.players[self.name] = None
+                self.lobby.giveups.discard(self.name)
+
                 if any(self.lobby.players.values()):
-                    for p, s in self.lobby.players.items():
-                        if s:
-                            s.sendMessage((":quit "+self.name).encode("utf8"))
+                    self.announceMsg(":quit "+self.name)
+                    self.check_giveup()
                 else:
                     # if there is no one left in this game, delete it
                     with (yield from lobbies_lock):
