@@ -1,0 +1,103 @@
+HOSTING
+
+A client that wishes to start a game should send this as its first message:
+
+	:host <playername>
+
+if the name is invalid, the server will respond with
+	
+	:badname
+
+and immediately disconnect. for each word in the game, the client sends
+
+	<wordname> y
+
+if the word has already been guessed, or
+
+	<wordname> n
+
+if the word has not been guessed yet. After each word has been sent, the client sends
+
+	:endwords
+
+The server will respond with
+
+	<lobbyname>
+
+Which is the name of this game's lobby.
+
+JOINING A GAME
+
+A client joining a game that has already started should send this as its first message:
+
+	:join <lobbyname>
+
+If that lobby does not exist, the server will respond with
+
+	:nolobby
+
+and disconnect. If the lobby does exist, the server will respond with
+
+	:player <y/n> <playername>
+
+For each player currently in the game. The <y/n> will be y if the player is in the game, or n if the player joined but later left. When all of the players have been sent, the server will send
+
+	:endplayers
+
+The client then sends
+
+	<yourname>
+
+The server will respond with
+
+	:badname
+
+if the name is invalid. If this name is ok, the server will send
+
+	<word>
+
+for each word in the game. Once all words have been sent, the server will send
+
+	:endwords
+
+the server will then send all of the correct words that have been attempted, using the :attempt format described below.
+
+Then, the server will send all of the players that have voted to give up, using the format described below.
+
+BEING IN A GAME
+
+After attempting any word, the player sends this to the server:
+
+	:attempt <word>
+
+When any user attempts a word and sends it to the server, the following is sent to everyone else in the game, EXCEPT the user who attempted the word.
+
+	:attempt <word> <playername>
+
+When a user successfully joins a game (this happens when they get the ":ok" response from the server, the following is sent to everyone else alreadyC in the game:
+
+	:join <playername>
+
+When a player quits, the server will send this message:
+
+	:quit <playername>
+
+To vote to give up, the player sends this to the server:
+
+	:giveup
+
+When a player votes to give up, the following is sent to everyone else in the game, EXCEPT the user who placed the vote:
+
+	:giveup <playername>
+
+If a player removes their vote to give up, the above two messages should be sent, but with :ungiveup instead of :giveup.
+
+If a player quits, they should automatically remove their vote to give up on the client side, if it was placed.  The server should not send the :ungiveup message when a player quits-- it is implied.
+
+If everyone in the game (not including players who have left) has given up, the server sends this message to everyone in the game:
+
+	:allgiveup
+
+ACCEPTABLE PLAYER NAMES (should be implemented on both server and client side)
+* Names may only be made up of letters and numbers
+* Names must be at least one character long and no longer than ten characters
